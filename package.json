@@ -1,0 +1,12 @@
+{
+  "name": "devbox-verify-action",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check scripts/verify.mjs && node --check test/verify.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
