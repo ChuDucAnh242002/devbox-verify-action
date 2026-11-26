@@ -33,7 +33,7 @@ runs:
       run: node "$GITHUB_ACTION_PATH/scripts/verify.mjs" preflight
 
     - name: Install pinned Devbox environment
-      uses: jetify-com/devbox-install-action@734088efddca47cf44ff8a09289c6d0e51b73218 # v0.12.0
+      uses: jetify-com/devbox-install-action@05e954310554b6122a26b4880d69937f61b1eb2e # v0.16.0
       with:
         project-path: '.'
         devbox-version: ${{ inputs.devbox-version }}
