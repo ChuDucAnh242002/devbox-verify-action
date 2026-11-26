@@ -1,0 +1,72 @@
+name: Devbox Verify
+description: Run named Devbox scripts and require unchanged, committed Devbox configuration.
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  devbox-version:
+    description: Exact Devbox CLI version (major.minor.patch).
+    default: '0.22.0'
+  doctor-script:
+    description: Required diagnostic script defined in devbox.json.
+    default: doctor
+  setup-script:
+    description: Optional setup script defined in devbox.json; empty skips setup.
+    default: ''
+  test-script:
+    description: Required test script defined in devbox.json.
+    default: test
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs and committed configuration
+      id: preflight
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_DEVBOX_VERSION: ${{ inputs.devbox-version }}
+        INPUT_DOCTOR_SCRIPT: ${{ inputs.doctor-script }}
+        INPUT_SETUP_SCRIPT: ${{ inputs.setup-script }}
+        INPUT_TEST_SCRIPT: ${{ inputs.test-script }}
+      run: node "$GITHUB_ACTION_PATH/scripts/verify.mjs" preflight
+
+    - name: Install pinned Devbox environment
+      uses: jetify-com/devbox-install-action@734088efddca47cf44ff8a09289c6d0e51b73218 # v0.12.0
+      with:
+        project-path: '.'
+        devbox-version: ${{ inputs.devbox-version }}
+        refresh-cli: 'true'
+        enable-cache: 'false'
+        disable-nix-access-token: 'true'
+
+    - name: Run diagnostics
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_SCRIPT: ${{ inputs.doctor-script }}
+      run: node "$GITHUB_ACTION_PATH/scripts/verify.mjs" run
+
+    - name: Run setup
+      if: inputs.setup-script != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_SCRIPT: ${{ inputs.setup-script }}
+      run: node "$GITHUB_ACTION_PATH/scripts/verify.mjs" run
+
+    - name: Run tests
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_SCRIPT: ${{ inputs.test-script }}
+      run: node "$GITHUB_ACTION_PATH/scripts/verify.mjs" run
+
+    - name: Verify configuration stayed unchanged
+      if: ${{ always() && steps.preflight.outputs.validated == 'true' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_BASELINE_COMMIT: ${{ steps.preflight.outputs.baseline }}
+      run: node "$GITHUB_ACTION_PATH/scripts/verify.mjs" check

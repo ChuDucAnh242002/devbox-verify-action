@@ -1,0 +1,114 @@
+name: Test action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - run: npm run check && npm test
+      - name: Lint workflow
+        uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # v1.7.7
+        with:
+          args: -color
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: success
+            doctor-script: doctor
+            setup-script: setup
+            test-script: test
+            expected: success
+            trace: doctor,setup,test
+          - scenario: no-setup
+            doctor-script: doctor
+            setup-script: ''
+            test-script: test
+            expected: success
+            trace: doctor,test
+          - scenario: doctor-failure
+            doctor-script: doctor-fail
+            setup-script: setup
+            test-script: test
+            expected: failure
+            trace: doctor-fail
+          - scenario: setup-failure
+            doctor-script: doctor
+            setup-script: setup-fail
+            test-script: test
+            expected: failure
+            trace: doctor,setup-fail
+          - scenario: test-failure
+            doctor-script: doctor
+            setup-script: setup
+            test-script: test-fail
+            expected: failure
+            trace: doctor,setup,test-fail
+          - scenario: lock-deletion
+            doctor-script: doctor
+            setup-script: setup
+            test-script: delete-lock
+            expected: failure
+            trace: doctor,setup,delete-lock
+    name: Composite integration (${{ matrix.scenario }})
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Commit consumer fixture in disposable checkout
+        run: |
+          cp test/fixtures/devbox.json test/fixtures/devbox.lock .
+          git config user.name "Action Tests"
+          git config user.email "tests@example.invalid"
+          git add devbox.json devbox.lock
+          git commit -m "Prepare integration fixture" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+      - name: Exercise local composite action
+        id: verify
+        continue-on-error: true
+        uses: ./
+        with:
+          doctor-script: ${{ matrix.doctor-script }}
+          setup-script: ${{ matrix.setup-script }}
+          test-script: ${{ matrix.test-script }}
+      - name: Assert expected action outcome
+        if: ${{ always() }}
+        env:
+          ACTUAL: ${{ steps.verify.outcome }}
+          EXPECTED: ${{ matrix.expected }}
+          EXPECTED_TRACE: ${{ matrix.trace }}
+        run: |
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo "::error::Expected action outcome $EXPECTED, got $ACTUAL"
+            exit 1
+          fi
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { readFileSync } from "node:fs";
+            assert.equal(readFileSync("trace", "utf8").trim().split("\n").join(","), process.env.EXPECTED_TRACE);
+          '

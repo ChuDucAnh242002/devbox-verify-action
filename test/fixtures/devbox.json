@@ -1,0 +1,14 @@
+{
+  "packages": [],
+  "shell": {
+    "scripts": {
+      "doctor": "printf 'doctor\\n' >> trace",
+      "setup": "printf 'setup\\n' >> trace",
+      "test": "printf 'test\\n' >> trace",
+      "doctor-fail": "printf 'doctor-fail\\n' >> trace; exit 7",
+      "setup-fail": "printf 'setup-fail\\n' >> trace; exit 7",
+      "test-fail": "printf 'test-fail\\n' >> trace; exit 7",
+      "delete-lock": "printf 'delete-lock\\n' >> trace; rm -- devbox.lock"
+    }
+  }
+}
